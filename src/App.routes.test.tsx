@@ -22,6 +22,13 @@ vi.mock("@/contexts/AuthContext", () => ({
   }),
 }));
 
+vi.mock("@/hooks/useUserSkills", () => ({
+  useAllSkills: () => ({ data: [], isLoading: false, error: null }),
+  useUserSkills: () => ({ data: [], isLoading: false, error: null }),
+  useAddUserSkill: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useRemoveUserSkill: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+}));
+
 vi.mock("@/components/AppLayout", () => ({
   default: ({ children }: { children: React.ReactNode }) => <div data-testid="app-layout">{children}</div>,
 }));
@@ -43,6 +50,10 @@ vi.mock("@/pages/Auth", () => ({ default: () => <div>Auth Page</div> }));
 vi.mock("@/pages/Dashboard", () => ({ default: () => <div>Dashboard Page</div> }));
 vi.mock("@/pages/Skills", () => ({ default: () => <div>Skills Page</div> }));
 vi.mock("@/pages/Career", () => ({ default: () => <div>Career Page</div> }));
+vi.mock("@/pages/CareerQuiz", () => ({ default: () => <div>Career Quiz Page</div> }));
+vi.mock("@/pages/ResumeAnalyzer", () => ({ default: () => <div>Resume Analyzer Page</div> }));
+vi.mock("@/pages/InterviewSimulator", () => ({ default: () => <div>Interview Simulator Page</div> }));
+vi.mock("@/pages/StudentProfile", () => ({ default: () => <div>Student Profile Page</div> }));
 vi.mock("@/pages/Finance", () => ({ default: () => <div>Finance Page</div> }));
 vi.mock("@/pages/Simulation", () => ({ default: () => <div>Simulation Page</div> }));
 vi.mock("@/pages/Planner", () => ({ default: () => <div>Planner Page</div> }));

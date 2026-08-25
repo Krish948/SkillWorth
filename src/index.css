@@ -112,6 +112,22 @@
   h1, h2, h3, h4, h5, h6 {
     @apply font-display;
   }
+
+  /* Lock Toast & Popup containers against hover displacement and fluctuation loops */
+  [data-sonner-toaster] {
+    pointer-events: none;
+  }
+
+  [data-sonner-toast] {
+    pointer-events: auto !important;
+    transform: none !important;
+    transition: opacity 180ms ease !important;
+  }
+
+  [data-sonner-toast]:hover {
+    transform: none !important;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22) !important;
+  }
 }
 
 @layer utilities {

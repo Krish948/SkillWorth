@@ -1,51 +1,41 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useUserSkills } from '@/hooks/useUserSkills';
 import { useJobs } from '@/hooks/useJobs';
+import { useStudentProfile } from '@/contexts/ProfileContext';
 import { getJobMatchScore, getSkillGaps, careerPaths, calculateSalaryFromSkills } from '@/data/skillsMapping';
+import { RICH_CAREERS, CareerDetail, getRichCareerDetail } from '@/data/careerDetails';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Radar, Layers, Sparkles, Target, TrendingUp, ArrowRight, Search } from 'lucide-react';
-import { formatINR, formatINRRange } from '@/lib/currency';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Radar, Layers, Search, Compass, FlaskConical, BookOpen, GraduationCap, Briefcase, Award } from 'lucide-react';
+import { formatINRRange } from '@/lib/currency';
 import { StatePanel } from '@/components/ui/state-panel';
-import { buildSkillDependencyGraph, getRoleClusterInsights, getSkillPrerequisites } from '@/lib/skill-graph';
-import { SkillGraphMap } from '@/components/SkillGraphMap';
+import Simulation from '@/pages/Simulation';
+import { toast } from 'sonner';
 
 export default function Career() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTabParam = searchParams.get('tab') || 'explorer';
+
+  const { profile, setTargetCareer } = useStudentProfile();
   const { data: userSkills = [], isLoading: userSkillsLoading, error: userSkillsError } = useUserSkills();
   const { data: jobs = [], isLoading: jobsLoading, error: jobsError } = useJobs();
+
   const [activeCategory, setActiveCategory] = useState<string>('all');
-  const [activePath, setActivePath] = useState<string>(Object.keys(careerPaths)[0] || '');
   const [roleSearch, setRoleSearch] = useState('');
   const [demandSearch, setDemandSearch] = useState('');
-  const [pathSearch, setPathSearch] = useState('');
-  const [selectedGraphSkills, setSelectedGraphSkills] = useState<string[]>([]);
-  const [graphMatchMode, setGraphMatchMode] = useState<'any' | 'all'>('any');
+  const [selectedCareerDetail, setSelectedCareerDetail] = useState<CareerDetail | null>(null);
+
+  const handleTabChange = (val: string) => {
+    setSearchParams({ tab: val });
+  };
 
   const skillNames = userSkills.map(us => us.skills?.name).filter(Boolean) as string[];
-  const skillGroups = useMemo(
-    () =>
-      Object.entries(
-        userSkills.reduce<Record<string, { name: string; level: number }[]>>((groups, userSkill) => {
-          const skillName = userSkill.skills?.name;
-          if (!skillName) return groups;
-
-          const category = userSkill.skills?.category || 'uncategorized';
-          if (!groups[category]) groups[category] = [];
-          groups[category].push({ name: skillName, level: userSkill.level });
-          return groups;
-        }, {}),
-      )
-        .map(([category, skills]) => ({
-          category,
-          skills: skills.sort((a, b) => b.level - a.level || a.name.localeCompare(b.name)),
-        }))
-        .sort((a, b) => b.skills.length - a.skills.length || a.category.localeCompare(b.category)),
-    [userSkills],
-  );
-  const salary = calculateSalaryFromSkills(skillNames);
 
   const jobMatches = useMemo(
     () =>
@@ -54,6 +44,7 @@ export default function Career() {
           ...job,
           match: getJobMatchScore(skillNames, job.required_skills),
           gaps: getSkillGaps(skillNames, job.required_skills),
+          detail: getRichCareerDetail(job.role),
         }))
         .sort((a, b) => b.match - a.match),
     [jobs, skillNames],
@@ -82,35 +73,20 @@ export default function Career() {
     [filteredMatches, roleSearch],
   );
 
-  const graphFilteredMatches = useMemo(
-    () =>
-      selectedGraphSkills.length > 0
-        ? roleFilteredMatches.filter(job => {
-            if (graphMatchMode === 'all') {
-              return selectedGraphSkills.every(skill => job.required_skills.includes(skill));
-            }
-            return selectedGraphSkills.some(skill => job.required_skills.includes(skill));
-          })
-        : roleFilteredMatches,
-    [graphMatchMode, roleFilteredMatches, selectedGraphSkills],
-  );
-
-  const roleSpotlight = graphFilteredMatches[0];
+  const roleSpotlight = roleFilteredMatches[0];
 
   const demandGaps = useMemo(() => {
     const demandBySkill: Record<string, number> = {};
-
-    graphFilteredMatches.forEach(job => {
+    roleFilteredMatches.forEach(job => {
       job.gaps.forEach(skill => {
         demandBySkill[skill] = (demandBySkill[skill] || 0) + 1;
       });
     });
-
     return Object.entries(demandBySkill)
       .map(([skill, demand]) => ({ skill, demand }))
       .sort((a, b) => b.demand - a.demand)
       .slice(0, 8);
-  }, [graphFilteredMatches]);
+  }, [roleFilteredMatches]);
 
   const visibleDemandGaps = useMemo(
     () =>
@@ -122,82 +98,18 @@ export default function Career() {
     [demandGaps, demandSearch],
   );
 
-  const suggestedPaths = useMemo(
-    () =>
-      Object.entries(careerPaths)
-        .map(([key, path]) => {
-          const owned = path.requiredSkills.filter(skill => skillNames.includes(skill));
-          const missing = path.requiredSkills.filter(skill => !skillNames.includes(skill));
-          return {
-            key,
-            ...path,
-            progress: Math.round((owned.length / path.requiredSkills.length) * 100),
-            missing,
-          };
-        })
-        .sort((a, b) => b.progress - a.progress),
-    [skillNames],
-  );
-
-  const roleClusters = useMemo(
-    () => getRoleClusterInsights(skillNames).slice(0, 3),
-    [skillNames],
-  );
-
-  const dependencyHotspots = useMemo(() => {
-    const missingSet = new Set(demandGaps.map(item => item.skill));
-
-    return demandGaps
-      .map(item => ({
-        skill: item.skill,
-        prerequisites: getSkillPrerequisites(item.skill).filter(prerequisite => !skillNames.includes(prerequisite)),
-      }))
-      .filter(item => item.prerequisites.length > 0 && missingSet.has(item.skill))
-      .slice(0, 4);
-  }, [demandGaps, skillNames]);
-
-  const visiblePaths = useMemo(
-    () =>
-      suggestedPaths.filter(path =>
-        pathSearch.trim().length === 0
-          ? true
-          : `${path.key} ${path.title}`.toLowerCase().includes(pathSearch.trim().toLowerCase()),
-      ),
-    [suggestedPaths, pathSearch],
-  );
-
-  const selectedPath = visiblePaths.find(path => path.key === activePath) || visiblePaths[0];
-
-  const graphSeeds = useMemo(() => {
-    const pathCandidates = selectedPath?.missing.slice(0, 3) || [];
-    const demandCandidates = demandGaps.slice(0, 3).map(item => item.skill);
-    return Array.from(new Set([...pathCandidates, ...demandCandidates]));
-  }, [demandGaps, selectedPath]);
-
-  const dependencyGraph = useMemo(
-    () => buildSkillDependencyGraph(skillNames, graphSeeds),
-    [graphSeeds, skillNames],
-  );
-
-  const toggleGraphSkill = (skill: string) => {
-    setSelectedGraphSkills(prev =>
-      prev.includes(skill)
-        ? prev.filter(current => current !== skill)
-        : [...prev, skill],
-    );
+  const handleSelectRoleTarget = (roleName: string) => {
+    setTargetCareer(roleName);
+    toast.success(`Target career set to ${roleName}`);
   };
-
-  const highMatchCount = graphFilteredMatches.filter(job => job.match >= 75).length;
-  const mediumMatchCount = graphFilteredMatches.filter(job => job.match >= 50 && job.match < 75).length;
-  const lowMatchCount = graphFilteredMatches.filter(job => job.match < 50).length;
 
   if (userSkillsLoading || jobsLoading) {
     return (
       <div className="page-shell">
         <StatePanel
           type="loading"
-          title="Loading career command center"
-          description="Mapping role fit, skill demand, and pathway momentum..."
+          title="Loading career module"
+          description="Mapping career tracks, role fit, and skill analysis..."
         />
       </div>
     );
@@ -208,7 +120,7 @@ export default function Career() {
       <div className="page-shell">
         <StatePanel
           type="error"
-          title="Could not load career insights"
+          title="Could not load career data"
           description="Please refresh and try again."
           actionLabel="Reload"
           onAction={() => window.location.reload()}
@@ -219,390 +131,275 @@ export default function Career() {
 
   return (
     <div className="space-y-6 animate-fade-in page-shell">
+      {/* Module Header */}
       <section className="page-hero">
-        <div className="relative z-10 grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(260px,360px)] lg:items-end">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em]">Career Command Center</Badge>
-              <Badge variant="outline" className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em]">Role radar</Badge>
+              <Badge variant="secondary" className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em]">Career Hub</Badge>
+              <Badge variant="outline" className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em]">{profile.targetCareer || 'Frontend Developer'}</Badge>
             </div>
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-display font-bold mt-4">Design your next move with clearer signals.</h1>
-            <p className="text-sm sm:text-base text-muted-foreground mt-3 max-w-2xl">
-              Compare role fit, reveal skill demand, and map the pathway that gets you to the next level faster.
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-display font-bold mt-4">Explore roles, signals, & decision paths.</h1>
+            <p className="text-muted-foreground mt-3 max-w-2xl">
+              Consolidated module combining Career Explorer, Role Radar, and Career Decision Simulation.
             </p>
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-2xl border border-border/60 bg-card/90 p-3">
-              <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Skill portfolio</p>
-              <p className="text-2xl font-display font-bold mt-2">{skillNames.length}</p>
-            </div>
-            <div className="rounded-2xl border border-border/60 bg-card/90 p-3">
-              <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Salary estimate</p>
-              <p className="text-2xl font-display font-bold mt-2">{formatINR(salary.estimated)}</p>
-            </div>
-            <div className="rounded-2xl border border-border/60 bg-card/90 p-3 col-span-2">
-              <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Active roles</p>
-              <p className="text-2xl font-display font-bold mt-2">{graphFilteredMatches.length}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-5 flex flex-wrap gap-2">
-          {categories.map(category => (
-            <Button
-              key={category}
-              variant={activeCategory === category ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setActiveCategory(category)}
-              className="capitalize"
-            >
-              {category}
-            </Button>
-          ))}
         </div>
       </section>
 
-      <Card className="panel-soft overflow-hidden">
-        <CardHeader className="border-b border-border/50 bg-[linear-gradient(120deg,hsl(var(--career)/0.12),transparent)]">
-          <CardTitle className="text-lg font-display flex items-center gap-2">
-            <Layers className="w-5 h-5 text-primary" /> Skill Categories
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 sm:p-5">
-          {skillGroups.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Add a few skills first, then the app will group them here by category.</p>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {skillGroups.map(group => (
-                <div key={group.category} className="rounded-2xl border border-border/60 bg-card/80 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{group.category}</p>
-                      <p className="text-sm font-semibold mt-1">{group.skills.length} skill{group.skills.length === 1 ? '' : 's'}</p>
-                    </div>
-                    <Badge variant="secondary" className="capitalize">{group.category}</Badge>
-                  </div>
+      {/* Sub-Navigation Tabs */}
+      <Tabs value={activeTabParam} onValueChange={handleTabChange} className="space-y-6">
+        <TabsList className="grid grid-cols-1 sm:grid-cols-3 gap-1 bg-muted/60 p-1.5 rounded-2xl h-auto max-w-xl">
+          <TabsTrigger value="explorer" className="text-xs py-2 rounded-xl gap-1.5">
+            <Compass className="w-3.5 h-3.5" /> Career Explorer
+          </TabsTrigger>
+          <TabsTrigger value="radar" className="text-xs py-2 rounded-xl gap-1.5">
+            <Radar className="w-3.5 h-3.5" /> Role Radar
+          </TabsTrigger>
+          <TabsTrigger value="simulation" className="text-xs py-2 rounded-xl gap-1.5">
+            <FlaskConical className="w-3.5 h-3.5" /> Decision Simulator
+          </TabsTrigger>
+        </TabsList>
 
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {group.skills.map(skill => (
-                      <Badge key={`${group.category}-${skill.name}`} variant="outline" className="text-[10px] px-2 py-0.5 capitalize">
-                        {skill.name} · Lv.{skill.level}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        {/* Tab 1: Career Explorer */}
+        <TabsContent value="explorer" className="space-y-6">
+          <div className="flex flex-wrap gap-2 mb-4">
+            {categories.map(category => (
+              <Button
+                key={category}
+                variant={activeCategory === category ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setActiveCategory(category)}
+                className="capitalize text-xs"
+              >
+                {category}
+              </Button>
+            ))}
+          </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,.9fr)]">
-        <div className="space-y-6 min-w-0">
-          <Card className="panel-soft overflow-hidden">
-            <CardHeader className="bg-[linear-gradient(120deg,hsl(var(--career)/0.12),transparent)] border-b border-border/50">
-              <CardTitle className="text-lg font-display flex items-center gap-2">
-                <Radar className="w-5 h-5 text-primary" /> Role Radar
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-5 space-y-3">
-              {roleSpotlight ? (
-                <div className="rounded-xl border border-border/60 p-4 bg-card/80">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Role spotlight</p>
-                      <p className="text-xl font-bold font-display mt-1">{roleSpotlight.role}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{formatINRRange(roleSpotlight.salary_min, roleSpotlight.salary_max)}</p>
-                    </div>
-                    <Badge variant={roleSpotlight.match >= 75 ? 'default' : 'secondary'} className="text-xs">
-                      {roleSpotlight.match}% ready
-                    </Badge>
-                  </div>
-                  <Progress value={roleSpotlight.match} className="h-2 mt-3" />
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No roles match this filter yet.</p>
-              )}
-
-              <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-lg border border-border/60 p-3 text-center">
-                  <p className="text-[11px] text-muted-foreground">High</p>
-                  <p className="text-lg font-bold text-primary">{highMatchCount}</p>
-                </div>
-                <div className="rounded-lg border border-border/60 p-3 text-center">
-                  <p className="text-[11px] text-muted-foreground">Medium</p>
-                  <p className="text-lg font-bold">{mediumMatchCount}</p>
-                </div>
-                <div className="rounded-lg border border-border/60 p-3 text-center">
-                  <p className="text-[11px] text-muted-foreground">Low</p>
-                  <p className="text-lg font-bold text-muted-foreground">{lowMatchCount}</p>
-                </div>
-              </div>
-
-              <div className="relative">
-                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                <Input
-                  value={roleSearch}
-                  onChange={e => setRoleSearch(e.target.value)}
-                  placeholder="Search roles in radar"
-                  className="pl-9"
-                />
-              </div>
-
-              {selectedGraphSkills.length > 0 && (
-                <div className="space-y-2 rounded-xl border border-border/60 bg-muted/25 p-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs text-muted-foreground">
-                      Graph filters: <span className="text-foreground font-medium">{selectedGraphSkills.join(', ')}</span>
-                    </p>
-                    <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => setSelectedGraphSkills([])}>
-                      Clear
-                    </Button>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <Button
-                      size="sm"
-                      variant={graphMatchMode === 'any' ? 'default' : 'outline'}
-                      className="h-7 text-[11px]"
-                      onClick={() => setGraphMatchMode('any')}
-                    >
-                      Match any
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={graphMatchMode === 'all' ? 'default' : 'outline'}
-                      className="h-7 text-[11px]"
-                      onClick={() => setGraphMatchMode('all')}
-                    >
-                      Match all
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-2 max-h-[420px] overflow-auto pr-1">
-                {graphFilteredMatches.map(job => (
-                  <article key={job.id} className="rounded-2xl border border-border/60 bg-background/70 p-3">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold">{job.role}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{formatINRRange(job.salary_min, job.salary_max)}</p>
-                      </div>
-                      <Badge variant={job.match >= 75 ? 'default' : job.match >= 50 ? 'secondary' : 'outline'}>
-                        {job.match}%
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {filteredMatches.map(job => {
+              const detail = job.detail;
+              return (
+                <Card key={job.id} className="panel-soft flex flex-col justify-between hover-glow group">
+                  <CardHeader>
+                    <div className="flex items-center justify-between gap-2">
+                      <Badge variant="secondary" className="capitalize text-[10px]">{job.category}</Badge>
+                      <Badge variant={job.match >= 75 ? 'default' : 'outline'} className="text-xs">
+                        {job.match}% match
                       </Badge>
                     </div>
-                    <Progress value={job.match} className="h-1.5 mt-2" />
-                    {selectedGraphSkills.length > 0 && selectedGraphSkills.some(skill => job.required_skills.includes(skill)) && (
-                      <p className="text-[11px] text-primary mt-2">Impacted by selected graph skill</p>
-                    )}
-                    {job.gaps.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {job.gaps.slice(0, 4).map(gap => (
-                          <Badge key={`${job.id}-${gap}`} variant="outline" className="text-[10px] px-1.5 py-0">
-                            {gap}
-                          </Badge>
+                    <CardTitle className="text-xl font-display mt-2">{job.role}</CardTitle>
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{detail.description}</p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-1 text-xs">
+                      <p className="text-muted-foreground font-semibold">Salary Range:</p>
+                      <p className="font-bold text-foreground">{formatINRRange(detail.salaryMin, detail.salaryMax)}</p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-muted-foreground font-semibold">Skill Tiers:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {detail.skillTiers.beginner.slice(0, 3).map(s => (
+                          <Badge key={s} variant="outline" className="text-[10px]">{s}</Badge>
+                        ))}
+                        {detail.skillTiers.intermediate.slice(0, 2).map(s => (
+                          <Badge key={s} variant="secondary" className="text-[10px]">{s}</Badge>
                         ))}
                       </div>
-                    )}
-                  </article>
-                ))}
-                {graphFilteredMatches.length === 0 && (
-                  <p className="text-xs text-muted-foreground">No roles match your search.</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                    </div>
 
-          <Card className="panel-soft">
-            <CardHeader>
-              <CardTitle className="text-lg font-display flex items-center gap-2">
-                <Layers className="w-5 h-5 text-primary" /> Skill Demand Heatmap
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="relative">
-                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                <Input
-                  value={demandSearch}
-                  onChange={e => setDemandSearch(e.target.value)}
-                  placeholder="Search demand skills"
-                  className="pl-9"
-                />
-              </div>
-              {visibleDemandGaps.length === 0 && <p className="text-sm text-muted-foreground">No demand items match the current filters.</p>}
-              {visibleDemandGaps.map(item => (
-                <div key={item.skill} className="rounded-2xl border border-border/60 bg-muted/20 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium">{item.skill}</p>
-                    <p className="text-xs text-muted-foreground">{item.demand} roles</p>
-                  </div>
-                  <Progress value={Math.min(100, item.demand * 16)} className="h-1.5 mt-2" />
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
+                    <div className="pt-2 flex flex-col gap-2">
+                      <Button size="sm" onClick={() => setSelectedCareerDetail(detail)} className="w-full text-xs hover-glow">
+                        View Full Career Profile →
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => handleSelectRoleTarget(job.role)} className="w-full text-xs">
+                        Set as Primary Target Goal
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </TabsContent>
 
-        <aside className="space-y-6 lg:sticky lg:top-24 self-start">
-          <Card className="panel-soft">
-            <CardHeader>
-              <CardTitle className="text-lg font-display flex items-center gap-2">
-                <Target className="w-5 h-5 text-primary" /> Pathway Explorer
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="relative">
-                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                <Input
-                  value={pathSearch}
-                  onChange={e => setPathSearch(e.target.value)}
-                  placeholder="Search pathways"
-                  className="pl-9"
-                />
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {visiblePaths.map(path => (
-                  <Button
-                    key={path.key}
-                    variant={path.key === selectedPath?.key ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setActivePath(path.key)}
-                    className="text-xs hover-glow"
-                  >
-                    {path.key}
-                  </Button>
-                ))}
-              </div>
-
-              {visiblePaths.length === 0 && (
-                <p className="text-xs text-muted-foreground">No pathway matches your search.</p>
-              )}
-
-              {selectedPath && (
-                <div className="rounded-2xl border border-border/60 p-4 bg-muted/20">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-semibold text-sm">{selectedPath.title}</p>
-                    <Badge variant="secondary">{selectedPath.progress}% complete</Badge>
-                  </div>
-                  <Progress value={selectedPath.progress} className="h-1.5 mt-2" />
-
-                  <div className="mt-3 space-y-2">
-                    {selectedPath.steps.map((step, index) => {
-                      const requiredSkill = selectedPath.requiredSkills[index];
-                      const isCovered = requiredSkill ? skillNames.includes(requiredSkill) : false;
-
-                      return (
-                        <div key={step} className="flex items-center gap-2 text-xs">
-                          <Sparkles className={`w-3.5 h-3.5 ${isCovered ? 'text-primary' : 'text-muted-foreground'}`} />
-                          <span className={isCovered ? 'font-medium text-foreground' : 'text-muted-foreground'}>{step}</span>
-                          {index < selectedPath.steps.length - 1 && <ArrowRight className="w-3 h-3 text-muted-foreground" />}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {selectedPath.missing.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1">
-                      {selectedPath.missing.slice(0, 4).map(skill => (
-                        <Badge key={`${selectedPath.key}-${skill}`} variant="outline" className="text-[10px]">
-                          missing {skill}
-                        </Badge>
-                      ))}
+        {/* Tab 2: Role Radar */}
+        <TabsContent value="radar" className="space-y-6">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,.9fr)]">
+            <div className="space-y-6 min-w-0">
+              <Card className="panel-soft">
+                <CardHeader>
+                  <CardTitle className="text-lg font-display flex items-center gap-2">
+                    <Radar className="w-5 h-5 text-primary" /> Role Match Radar
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 space-y-4">
+                  {roleSpotlight && (
+                    <div className="rounded-xl border border-border/60 p-4 bg-card/80 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-muted-foreground uppercase font-semibold">Spotlight Match</span>
+                        <Badge variant="default">{roleSpotlight.match}% Ready</Badge>
+                      </div>
+                      <p className="text-xl font-bold font-display">{roleSpotlight.role}</p>
+                      <p className="text-xs text-muted-foreground">{formatINRRange(roleSpotlight.salary_min, roleSpotlight.salary_max)}</p>
+                      <Progress value={roleSpotlight.match} className="h-2" />
                     </div>
                   )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
 
-          <Card className="gradient-career hover-glow text-career-foreground border-border/50">
-            <CardContent className="p-4">
-              <div className="flex items-start gap-3">
-                <TrendingUp className="w-5 h-5 mt-0.5" />
-                <div>
-                  <p className="text-xs opacity-90">Salary Trajectory</p>
-                  <p className="text-xl font-bold font-display mt-1">{formatINRRange(salary.min, salary.max)}</p>
-                  <p className="text-xs opacity-90 mt-1">Current estimate: {formatINR(salary.estimated)} per year</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="panel-soft">
-            <CardHeader>
-              <CardTitle className="text-lg font-display">Skill Graph Intelligence</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {roleClusters.map(cluster => (
-                <div key={cluster.id} className="rounded-xl border border-border/60 p-3 bg-muted/20">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold">{cluster.label}</p>
-                    <Badge variant="secondary">{cluster.completion}%</Badge>
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                    <Input
+                      value={roleSearch}
+                      onChange={e => setRoleSearch(e.target.value)}
+                      placeholder="Search roles in radar..."
+                      className="pl-9"
+                    />
                   </div>
-                  <Progress value={cluster.completion} className="h-1.5 mt-2" />
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    Missing: {cluster.missingSkills.slice(0, 3).join(', ') || 'None'}
-                  </p>
-                </div>
-              ))}
 
-              {dependencyHotspots.length > 0 && (
-                <div className="rounded-xl border border-border/60 p-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Dependency hotspots</p>
-                  <div className="mt-2 space-y-1.5">
-                    {dependencyHotspots.map(item => (
-                      <p key={item.skill} className="text-xs text-muted-foreground">
-                        <span className="text-foreground font-medium">{item.skill}</span> needs {item.prerequisites.slice(0, 2).join(', ')}
-                      </p>
+                  <div className="space-y-2 max-h-[440px] overflow-auto pr-1">
+                    {roleFilteredMatches.map(job => (
+                      <article key={job.id} className="rounded-2xl border border-border/60 bg-background/70 p-3.5 space-y-2">
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold">{job.role}</p>
+                            <p className="text-xs text-muted-foreground">{formatINRRange(job.salary_min, job.salary_max)}</p>
+                          </div>
+                          <Badge variant={job.match >= 75 ? 'default' : 'secondary'}>{job.match}%</Badge>
+                        </div>
+                        <Progress value={job.match} className="h-1.5" />
+                        {job.gaps.length > 0 && (
+                          <div className="flex flex-wrap gap-1 pt-1">
+                            {job.gaps.map(gap => (
+                              <Badge key={`${job.id}-${gap}`} variant="outline" className="text-[10px]">missing {gap}</Badge>
+                            ))}
+                          </div>
+                        )}
+                      </article>
                     ))}
                   </div>
-                </div>
-              )}
+                </CardContent>
+              </Card>
+            </div>
 
-              <div className="rounded-xl border border-border/60 p-3 bg-background/70">
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Dependency graph</p>
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Targets are generated from pathway gaps and top demand skills.
-                </p>
-                <div className="mt-3">
-                  <SkillGraphMap
-                    graph={dependencyGraph}
-                    selectedSkills={selectedGraphSkills}
-                    onToggleSkill={toggleGraphSkill}
-                  />
+            <aside className="space-y-6 lg:sticky lg:top-24 self-start">
+              <Card className="panel-soft">
+                <CardHeader>
+                  <CardTitle className="text-lg font-display flex items-center gap-2">
+                    <Layers className="w-5 h-5 text-primary" /> Skill Demand Heatmap
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-xs">
+                  <Input value={demandSearch} onChange={e => setDemandSearch(e.target.value)} placeholder="Search demand skills..." />
+                  {visibleDemandGaps.map(item => (
+                    <div key={item.skill} className="rounded-xl border border-border/60 p-2.5">
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold">{item.skill}</span>
+                        <span className="text-muted-foreground">{item.demand} roles</span>
+                      </div>
+                      <Progress value={Math.min(100, item.demand * 16)} className="h-1.5 mt-1.5" />
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </aside>
+          </div>
+        </TabsContent>
+
+        {/* Tab 3: Career Simulation */}
+        <TabsContent value="simulation">
+          <Simulation />
+        </TabsContent>
+      </Tabs>
+
+      {/* Rich Career Detail Modal */}
+      {selectedCareerDetail && (
+        <Dialog open={Boolean(selectedCareerDetail)} onOpenChange={() => setSelectedCareerDetail(null)}>
+          <DialogContent className="sm:max-w-2xl panel-soft max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <div className="flex items-center justify-between gap-2">
+                <Badge variant="secondary" className="capitalize text-xs">{selectedCareerDetail.category}</Badge>
+                <Badge variant="default">{selectedCareerDetail.industryDemand} Demand</Badge>
+              </div>
+              <DialogTitle className="text-2xl font-display mt-2">{selectedCareerDetail.role}</DialogTitle>
+              <DialogDescription className="text-xs leading-relaxed">{selectedCareerDetail.description}</DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-6 pt-3 text-xs">
+              <div className="rounded-xl bg-primary/10 p-3 space-y-1 text-primary">
+                <p className="font-semibold flex items-center gap-1.5"><GraduationCap className="w-4 h-4" /> Required Education</p>
+                <p className="text-foreground">{selectedCareerDetail.requiredEducation}</p>
+              </div>
+
+              <div>
+                <p className="font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2">Skill Requirements by Tier</p>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border border-border/60 p-3 space-y-1">
+                    <p className="font-semibold text-emerald-500">Beginner Tier</p>
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {selectedCareerDetail.skillTiers.beginner.map(s => <Badge key={s} variant="outline" className="text-[10px]">{s}</Badge>)}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-border/60 p-3 space-y-1">
+                    <p className="font-semibold text-sky-500">Intermediate Tier</p>
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {selectedCareerDetail.skillTiers.intermediate.map(s => <Badge key={s} variant="secondary" className="text-[10px]">{s}</Badge>)}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-border/60 p-3 space-y-1">
+                    <p className="font-semibold text-violet-500">Advanced Tier</p>
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {selectedCareerDetail.skillTiers.advanced.map(s => <Badge key={s} variant="default" className="text-[10px]">{s}</Badge>)}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
 
-          <Card className="panel-soft">
-            <CardHeader>
-              <CardTitle className="text-lg font-display">Career Snapshot</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-lg border border-border/60 p-3">
-                  <p className="text-[11px] text-muted-foreground">Focused</p>
-                  <p className="text-lg font-bold">{graphFilteredMatches.length}</p>
-                </div>
-                <div className="rounded-lg border border-border/60 p-3">
-                  <p className="text-[11px] text-muted-foreground">Demand</p>
-                  <p className="text-lg font-bold">{visibleDemandGaps.length}</p>
-                </div>
-                <div className="rounded-lg border border-border/60 p-3">
-                  <p className="text-[11px] text-muted-foreground">Paths</p>
-                  <p className="text-lg font-bold">{visiblePaths.length}</p>
+              <div>
+                <p className="font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2 flex items-center gap-1.5"><Award className="w-4 h-4 text-primary" /> Recommended Certifications</p>
+                <ul className="space-y-1 text-muted-foreground">
+                  {selectedCareerDetail.requiredCertifications.map((cert, i) => <li key={i}>• {cert}</li>)}
+                </ul>
+              </div>
+
+              <div>
+                <p className="font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2 flex items-center gap-1.5"><BookOpen className="w-4 h-4 text-primary" /> Recommended Portfolio Projects</p>
+                <div className="space-y-2">
+                  {selectedCareerDetail.recommendedProjects.map((p, i) => (
+                    <div key={i} className="rounded-xl border border-border/60 p-2.5 bg-card">
+                      <div className="flex justify-between font-semibold">
+                        <span>{p.title}</span>
+                        <Badge variant="outline" className="text-[9px]">{p.difficulty}</Badge>
+                      </div>
+                      <p className="text-muted-foreground mt-0.5">{p.description}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Use the left column to filter roles and demand, then use this rail to inspect the most realistic pathway and compensation range.
-              </p>
-            </CardContent>
-          </Card>
-        </aside>
-      </div>
+
+              <div>
+                <p className="font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2 flex items-center gap-1.5"><Briefcase className="w-4 h-4 text-primary" /> Internship Opportunities</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {selectedCareerDetail.internshipOpportunities.map((intern, i) => (
+                    <div key={i} className="rounded-xl border border-border/60 p-2.5 bg-card">
+                      <p className="font-semibold">{intern.role} @ {intern.company}</p>
+                      <p className="text-muted-foreground">{intern.location} • {intern.stipend}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-border/60 flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setSelectedCareerDetail(null)}>Close</Button>
+                <Button onClick={() => { handleSelectRoleTarget(selectedCareerDetail.role); setSelectedCareerDetail(null); }} className="hover-glow">
+                  Set as Primary Career Goal ✓
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
