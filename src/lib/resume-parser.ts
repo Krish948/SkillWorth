@@ -89,7 +89,7 @@ export function parseResumeText(resumeText: string, targetRole: string): ParsedR
     }
   });
 
-  // 3. ATS Analysis
+  // 3. ATS Analysis & Transparent 6-Factor Scoring Engine
   const missingSections: string[] = [];
   if (education.length === 0) missingSections.push('Education');
   if (experience.length === 0) missingSections.push('Work Experience');
@@ -98,13 +98,31 @@ export function parseResumeText(resumeText: string, targetRole: string): ParsedR
   const formattingIssues: string[] = [];
   if (resumeText.length < 200) formattingIssues.push('Resume text is too brief (less than 200 characters).');
   if (!textLower.includes('@')) formattingIssues.push('Missing contact email address.');
+  if (missingSections.length > 0) formattingIssues.push(`Missing standard sections: ${missingSections.join(', ')}`);
 
-  const keywordDensityScore = Math.min(100, extractedSkills.length * 12);
+  // 6-Factor Weighted Methodology:
+  // Formatting (20%), Keywords (25%), Skills (20%), Experience (15%), Projects (10%), Content Quality (10%)
+  const formattingScore = Math.max(20, Math.min(100, 100 - (formattingIssues.length * 20)));
+  const keywordDensityScore = Math.min(100, Math.max(30, extractedSkills.length * 10 + (resumeText.length > 500 ? 20 : 0)));
+  const skillsScore = Math.min(100, Math.max(20, extractedSkills.length * 14));
+  const experienceScore = experience.length >= 2 ? 90 : experience.length === 1 ? 70 : 40;
+  const projectScore = projects.length >= 2 ? 90 : projects.length === 1 ? 70 : 40;
+
+  const hasNumbers = /\d+%|\d+x|\$\d+|\d+ users|\d+ ms/i.test(resumeText);
+  const contentQualityScore = hasNumbers ? 88 : 55;
   const readabilityScore = resumeText.length >= 300 && resumeText.length <= 3000 ? 90 : 70;
-  const atsScore = Math.max(30, Math.round(100 - (missingSections.length * 15) - (formattingIssues.length * 10) + (extractedSkills.length * 3)));
+
+  const atsScore = Math.round(
+    formattingScore * 0.20 +
+    keywordDensityScore * 0.25 +
+    skillsScore * 0.20 +
+    experienceScore * 0.15 +
+    projectScore * 0.10 +
+    contentQualityScore * 0.10
+  );
 
   const atsAnalysis: AtsAnalysisResult = {
-    atsScore: Math.min(98, atsScore),
+    atsScore: Math.min(98, Math.max(20, atsScore)),
     formattingIssues,
     missingSections,
     keywordDensityScore,
@@ -120,7 +138,6 @@ export function parseResumeText(resumeText: string, targetRole: string): ParsedR
   });
 
   const missingMetrics: string[] = [];
-  const hasNumbers = /\d+%|\d+x|\$\d+|\d+ users|\d+ ms/i.test(resumeText);
   if (!hasNumbers) {
     missingMetrics.push('Missing quantifiable metrics/impact (e.g., "improved speed by 25%", "reduced load times by 300ms", "built for 10k users").');
   }

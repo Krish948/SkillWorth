@@ -10,13 +10,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Wallet, Plus, X, Target, PiggyBank, TrendingDown, CalendarDays, Repeat2, Filter, Flame, Landmark, ShieldCheck, CircleDollarSign, TrendingUp, Sparkles } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { Wallet, Plus, X, Landmark, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { formatINR, formatINRCompact } from '@/lib/currency';
+import { formatINR } from '@/lib/currency';
 import { StatePanel } from '@/components/ui/state-panel';
 import { getStorageJson, setStorageJson } from '@/lib/local-storage';
 import { buildFinancialGrowthStrategy } from '@/lib/financial-growth';
@@ -24,8 +22,6 @@ import { calculateSalaryFromSkills } from '@/data/skillsMapping';
 
 const EXPENSE_CATEGORIES = ['Housing', 'Food', 'Transport', 'Entertainment', 'Utilities', 'Healthcare', 'Education', 'Shopping', 'Other'];
 const PAYMENT_MODES: Array<NonNullable<ExpenseItem['paymentMode']>> = ['UPI', 'Card', 'Cash', 'Bank Transfer', 'Auto Debit'];
-const PIE_COLORS = ['#10b981', '#8b5cf6', '#f59e0b', '#3b82f6', '#ef4444', '#6366f1', '#14b8a6', '#f97316', '#94a3b8'];
-const PIE_COLOR_CLASSES = ['bg-emerald-500', 'bg-violet-500', 'bg-amber-500', 'bg-sky-500', 'bg-red-500', 'bg-indigo-500', 'bg-teal-500', 'bg-orange-500', 'bg-slate-400'];
 const ESSENTIAL_CATEGORIES = ['Housing', 'Food', 'Transport', 'Utilities', 'Healthcare', 'Education'];
 
 interface FinancialGrowthPrefs {
@@ -242,7 +238,6 @@ export default function Finance() {
 
   return (
     <div className="space-y-6 animate-fade-in page-shell">
-      {/* Module Header */}
       <section className="page-hero">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -259,7 +254,6 @@ export default function Finance() {
         </div>
       </section>
 
-      {/* Sub-Navigation Tabs */}
       <Tabs value={activeTabParam} onValueChange={handleTabChange} className="space-y-6">
         <TabsList className="grid grid-cols-1 sm:grid-cols-3 gap-1 bg-muted/60 p-1.5 rounded-2xl h-auto max-w-xl">
           <TabsTrigger value="ledger" className="text-xs py-2 rounded-xl gap-1.5">
@@ -273,7 +267,6 @@ export default function Finance() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Tab 1: Transaction Ledger */}
         <TabsContent value="ledger" className="space-y-6">
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,.85fr)]">
             <div className="space-y-6 min-w-0">
@@ -391,7 +384,6 @@ export default function Finance() {
           </div>
         </TabsContent>
 
-        {/* Tab 2: Growth Strategy */}
         <TabsContent value="strategy" className="space-y-6">
           <Card className="panel-soft">
             <CardHeader>
@@ -422,7 +414,6 @@ export default function Finance() {
           </Card>
         </TabsContent>
 
-        {/* Tab 3: Career Upskilling ROI */}
         <TabsContent value="roi" className="space-y-6">
           <Card className="panel-soft">
             <CardHeader>

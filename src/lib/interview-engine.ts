@@ -245,16 +245,21 @@ export function generateInterviewReport(
   const missingConcepts: string[] = [];
 
   turns.forEach((turn, idx) => {
-    const wordCount = turn.candidateAnswer.trim().split(/\s+/).length;
-    let tech = Math.min(95, Math.max(35, Math.round(wordCount * 1.8)));
-    let comm = wordCount >= 25 ? 85 : 60;
-    let conf = wordCount >= 35 ? 88 : 65;
+    // Check if turn already has structured AI evaluation scores, otherwise calculate concept match
+    const evalScore = (turn as any).evaluationScore ?? (turn as any).overallScore;
+    const text = turn.candidateAnswer.trim();
+    const wordCount = text.split(/\s+/).length;
+    const hasTechnicalKeywords = /api|state|sql|database|component|test|docker|deploy|async|performance|optimize|security|react|python|java|aws|node|architecture/i.test(text);
 
-    if (wordCount >= 25) {
+    let tech = evalScore ? Math.min(100, Math.max(30, (turn as any).technicalDepthScore || evalScore)) : (hasTechnicalKeywords ? (wordCount >= 20 ? 82 : 70) : (wordCount >= 15 ? 55 : 35));
+    let comm = evalScore ? Math.min(100, Math.max(30, (turn as any).clarityScore || evalScore)) : (wordCount >= 30 ? 85 : wordCount >= 15 ? 70 : 50);
+    let conf = evalScore ? Math.min(100, Math.max(30, (turn as any).confidenceScore || evalScore)) : (hasTechnicalKeywords && wordCount >= 25 ? 88 : 65);
+
+    if (tech >= 75) {
       strongAnswers.push(`Turn ${idx + 1}: ${turn.question.slice(0, 50)}...`);
     } else {
-      weakAnswers.push(`Turn ${idx + 1}: ${turn.question.slice(0, 50)}... (Answer was brief)`);
-      missingConcepts.push(`Elaborate on ${role} implementation details for Question ${idx + 1}`);
+      weakAnswers.push(`Turn ${idx + 1}: ${turn.question.slice(0, 50)}... (${turn.feedback || 'Needs deeper technical precision'})`);
+      missingConcepts.push(`Elaborate on ${role} architectural patterns for Question ${idx + 1}`);
     }
 
     totalTech += tech;
@@ -283,9 +288,9 @@ export function generateInterviewReport(
     technicalAccuracyScore: avgTech,
     communicationScore: avgComm,
     confidenceScore: avgConf,
-    strongAnswers,
-    weakAnswers,
-    missingConcepts,
+    strongAnswers: Array.from(new Set(strongAnswers)),
+    weakAnswers: Array.from(new Set(weakAnswers)),
+    missingConcepts: Array.from(new Set(missingConcepts)),
     recommendedTopics,
     readinessLevel,
   };

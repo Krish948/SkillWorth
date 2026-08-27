@@ -4,6 +4,7 @@ import { useUserSkills, useAllSkills, useAddUserSkill, useRemoveUserSkill, UserS
 import { getStorageJson, setStorageJson } from '@/lib/local-storage';
 import { supabase } from '@/integrations/supabase/client';
 import { addNotification } from '@/lib/notifications';
+import { DatabaseService } from '@/services/api/databaseService';
 
 export type SkillValidationStatus = 'SELF_DECLARED' | 'RESUME_DETECTED' | 'VERIFIED';
 export type SkillLevelName = 'Beginner' | 'Intermediate' | 'Advanced' | 'Expert';
@@ -67,6 +68,19 @@ interface ProfileContextValue {
   setTargetCareer: (career: string) => void;
   addOrUpdateSkill: (skillName: string, category: string, level: number, status: SkillValidationStatus) => Promise<void>;
   verifySkill: (skillName: string) => void;
+  recordAssessmentAttempt: (attempt: {
+    skillName: string;
+    topic: string;
+    difficulty: string;
+    questionsAttempted: number;
+    correctAnswers: number;
+    totalQuestions: number;
+    score: number;
+    percentage: number;
+    strongConcepts: string[];
+    weakConcepts: string[];
+    studyRecommendations: string[];
+  }) => Promise<void>;
   removeSkill: (skillName: string) => Promise<void>;
   saveQuizResult: (result: QuizResult) => void;
   saveResumeData: (data: ResumeData) => void;
@@ -172,12 +186,10 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const addOrUpdateSkill = async (skillName: string, category: string, level: number, status: SkillValidationStatus) => {
-    // Check if skill exists in userSkillsRows
     const existing = userSkillsRows.find(us => us.skills?.name.toLowerCase() === skillName.toLowerCase());
     if (existing) {
       await addSkillMutation.mutateAsync({ skillId: existing.skill_id, level });
     } else {
-      // Look up skill in allSkills DB table
       const matched = allSkills.find(s => s.name.toLowerCase() === skillName.toLowerCase());
       if (matched) {
         await addSkillMutation.mutateAsync({ skillId: matched.id, level });
@@ -198,7 +210,49 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const recordAssessmentAttempt = async (attempt: {
+    skillName: string;
+    topic: string;
+    difficulty: string;
+    questionsAttempted: number;
+    correctAnswers: number;
+    totalQuestions: number;
+    score: number;
+    percentage: number;
+    strongConcepts: string[];
+    weakConcepts: string[];
+    studyRecommendations: string[];
+  }) => {
+    // EXACT RULE: percentage > 75 marks skill as VERIFIED. percentage <= 75 does NOT verify the skill.
+    const isVerified = attempt.percentage > 75;
+    const verificationStatus: 'VERIFIED' | 'NOT_VERIFIED' = isVerified ? 'VERIFIED' : 'NOT_VERIFIED';
+
+    if (isVerified) {
+      setLocalSkillsMeta(prev => ({
+        ...prev,
+        [attempt.skillName]: { status: 'VERIFIED', updatedAtIso: new Date().toISOString() },
+      }));
+    }
+
+    if (user?.id) {
+      await DatabaseService.saveAssessmentAttempt(user.id, {
+        ...attempt,
+        verificationStatus,
+        createdAtIso: new Date().toISOString(),
+      });
+
+      addNotification(user.id, {
+        title: isVerified ? 'Skill Verification Passed! ✓' : 'Skill Assessment Recorded',
+        message: isVerified
+          ? `Score ${attempt.percentage}% (>75%). Skill "${attempt.skillName}" is now VERIFIED!`
+          : `Score ${attempt.percentage}% (<=75%). Skill "${attempt.skillName}" remains NOT VERIFIED. Try again to pass >75%.`,
+        type: isVerified ? 'success' : 'info',
+      });
+    }
+  };
+
   const verifySkill = (skillName: string) => {
+    // Direct manual override call (e.g. from admin or passed test)
     setLocalSkillsMeta(prev => ({
       ...prev,
       [skillName]: { status: 'VERIFIED', updatedAtIso: new Date().toISOString() },
@@ -297,6 +351,7 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setTargetCareer,
         addOrUpdateSkill,
         verifySkill,
+        recordAssessmentAttempt,
         removeSkill,
         saveQuizResult,
         saveResumeData,

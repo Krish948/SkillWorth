@@ -262,34 +262,40 @@ export function evaluateSkillAssessment(
   skillName: string,
   userAnswers: { question: AssessmentQuestion; selectedIndex: number }[],
 ): VerificationResult {
-  let scorePoints = 0;
-  let maxPoints = 0;
+  let correctCount = 0;
+  const totalQuestions = userAnswers.length;
   const strongConcepts: string[] = [];
   const weakConcepts: string[] = [];
 
   userAnswers.forEach(ans => {
-    const weight = ans.question.tier * 10;
-    maxPoints += weight;
     if (ans.selectedIndex === ans.question.correctIndex) {
-      scorePoints += weight;
+      correctCount++;
       strongConcepts.push(ans.question.concept);
     } else {
       weakConcepts.push(ans.question.concept);
     }
   });
 
-  const verificationScore = maxPoints > 0 ? Math.round((scorePoints / maxPoints) * 100) : 0;
+  // Calculate raw unrounded percentage to ensure strict > 75 check without ambiguous rounding
+  const rawPercentage = totalQuestions > 0 ? (correctCount / totalQuestions) * 100 : 0;
+  const verificationScore = Math.round(rawPercentage);
+
+  // EXACT RULE: 75% or higher score (>=75%) marks skill as VERIFIED. Score < 75% remains UNVERIFIED.
+  // Examples: 75% -> VERIFIED, 76% -> VERIFIED, 80% -> VERIFIED, 90% -> VERIFIED, 100% -> VERIFIED.
+  // 74% -> SELF_DECLARED, 50% -> SELF_DECLARED.
+  const isVerified = rawPercentage >= 75;
+  const status: SkillValidationStatus = isVerified ? 'VERIFIED' : 'SELF_DECLARED';
 
   let verifiedLevel: SkillLevelName = 'Beginner';
   let levelNumber = 1;
 
-  if (verificationScore >= 85) {
+  if (verificationScore >= 90) {
     verifiedLevel = 'Expert';
     levelNumber = 4;
-  } else if (verificationScore >= 70) {
+  } else if (verificationScore >= 80) {
     verifiedLevel = 'Advanced';
     levelNumber = 3;
-  } else if (verificationScore >= 50) {
+  } else if (verificationScore >= 60) {
     verifiedLevel = 'Intermediate';
     levelNumber = 2;
   }
@@ -307,7 +313,7 @@ export function evaluateSkillAssessment(
     verificationScore,
     verifiedLevel,
     levelNumber,
-    status: 'VERIFIED',
+    status,
     strongConcepts: Array.from(new Set(strongConcepts)),
     weakConcepts: Array.from(new Set(weakConcepts)),
     studyRecommendations,

@@ -3,8 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { useUserSkills } from '@/hooks/useUserSkills';
 import { useJobs } from '@/hooks/useJobs';
 import { useStudentProfile } from '@/contexts/ProfileContext';
-import { getJobMatchScore, getSkillGaps, careerPaths, calculateSalaryFromSkills } from '@/data/skillsMapping';
-import { RICH_CAREERS, CareerDetail, getRichCareerDetail } from '@/data/careerDetails';
+import { getJobMatchScore, getSkillGaps } from '@/data/skillsMapping';
+import { CareerDetail, getRichCareerDetail } from '@/data/careerDetails';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Radar, Layers, Search, Compass, FlaskConical, BookOpen, GraduationCap, Briefcase, Award } from 'lucide-react';
 import { formatINRRange } from '@/lib/currency';
 import { StatePanel } from '@/components/ui/state-panel';
-import Simulation from '@/pages/Simulation';
+import Simulation from '@/views/Simulation';
 import { toast } from 'sonner';
 
 export default function Career() {
@@ -35,19 +35,26 @@ export default function Career() {
     setSearchParams({ tab: val });
   };
 
-  const skillNames = userSkills.map(us => us.skills?.name).filter(Boolean) as string[];
+  const allSkillNames = userSkills.map(us => us.skills?.name).filter(Boolean) as string[];
+  const verifiedSkills = profile.skills.filter(s => s.status === 'VERIFIED').map(s => s.name);
 
   const jobMatches = useMemo(
     () =>
       jobs
-        .map(job => ({
-          ...job,
-          match: getJobMatchScore(skillNames, job.required_skills),
-          gaps: getSkillGaps(skillNames, job.required_skills),
-          detail: getRichCareerDetail(job.role),
-        }))
+        .map(job => {
+          const matchScore = getJobMatchScore(allSkillNames, job.required_skills);
+          const verifiedMatchScore = getJobMatchScore(verifiedSkills, job.required_skills);
+          const gaps = getSkillGaps(verifiedSkills, job.required_skills);
+          return {
+            ...job,
+            match: matchScore,
+            verifiedMatch: verifiedMatchScore,
+            gaps,
+            detail: getRichCareerDetail(job.role),
+          };
+        })
         .sort((a, b) => b.match - a.match),
-    [jobs, skillNames],
+    [jobs, allSkillNames, verifiedSkills],
   );
 
   const categories = useMemo(
@@ -131,7 +138,6 @@ export default function Career() {
 
   return (
     <div className="space-y-6 animate-fade-in page-shell">
-      {/* Module Header */}
       <section className="page-hero">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -147,7 +153,6 @@ export default function Career() {
         </div>
       </section>
 
-      {/* Sub-Navigation Tabs */}
       <Tabs value={activeTabParam} onValueChange={handleTabChange} className="space-y-6">
         <TabsList className="grid grid-cols-1 sm:grid-cols-3 gap-1 bg-muted/60 p-1.5 rounded-2xl h-auto max-w-xl">
           <TabsTrigger value="explorer" className="text-xs py-2 rounded-xl gap-1.5">
@@ -161,7 +166,6 @@ export default function Career() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Tab 1: Career Explorer */}
         <TabsContent value="explorer" className="space-y-6">
           <div className="flex flex-wrap gap-2 mb-4">
             {categories.map(category => (
@@ -225,7 +229,6 @@ export default function Career() {
           </div>
         </TabsContent>
 
-        {/* Tab 2: Role Radar */}
         <TabsContent value="radar" className="space-y-6">
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,.9fr)]">
             <div className="space-y-6 min-w-0">
@@ -307,15 +310,13 @@ export default function Career() {
           </div>
         </TabsContent>
 
-        {/* Tab 3: Career Simulation */}
         <TabsContent value="simulation">
           <Simulation />
         </TabsContent>
       </Tabs>
 
-      {/* Rich Career Detail Modal */}
-      {selectedCareerDetail && (
-        <Dialog open={Boolean(selectedCareerDetail)} onOpenChange={() => setSelectedCareerDetail(null)}>
+      <Dialog open={Boolean(selectedCareerDetail)} onOpenChange={open => { if (!open) setSelectedCareerDetail(null); }}>
+        {selectedCareerDetail && (
           <DialogContent className="sm:max-w-2xl panel-soft max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <div className="flex items-center justify-between gap-2">
@@ -398,8 +399,8 @@ export default function Career() {
               </div>
             </div>
           </DialogContent>
-        </Dialog>
-      )}
+        )}
+      </Dialog>
     </div>
   );
 }

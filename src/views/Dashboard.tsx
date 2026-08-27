@@ -5,7 +5,7 @@ import { useFinance } from '@/hooks/useFinance';
 import { calculateSalaryFromSkills, getJobMatchScore, skillSalaryMap } from '@/data/skillsMapping';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Sparkles, Briefcase, TrendingUp, Wallet, ShieldCheck, FileText, Compass, MessageSquare, ArrowRight, Plus } from 'lucide-react';
+import { Sparkles, Briefcase, TrendingUp, Wallet, ShieldCheck, FileText, Compass, MessageSquare } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Link, useNavigate } from 'react-router-dom';
 import OnboardingChecklist from '@/components/OnboardingChecklist';
@@ -162,7 +162,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in page-shell">
-      {/* Command Center Hero */}
       <section className="page-hero">
         <div className="relative z-10 grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,360px)] lg:items-end">
           <div>
@@ -196,7 +195,6 @@ export default function Dashboard() {
 
       <OnboardingChecklist />
 
-      {/* Metrics Row */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[
           { label: 'Skills Portfolio', value: `${userSkills.length} skills`, icon: Sparkles, color: 'gradient-career' },
@@ -220,7 +218,6 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Shortcuts Module */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {shortcuts.map(sc => (
           <Link key={sc.title} to={sc.path} className="rounded-2xl border border-border/60 bg-card/80 p-3.5 hover:bg-muted/40 transition-all group">
@@ -231,10 +228,8 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Main Grid */}
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_340px]">
         <div className="space-y-6 min-w-0">
-          {/* Weekly Mission Control */}
           <Card className="panel-soft">
             <CardHeader className="pb-2">
               <CardTitle className="text-lg font-display flex items-center justify-between">
@@ -280,7 +275,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Salary Boost Chart */}
           <Card className="panel-soft">
             <CardHeader className="pb-2">
               <CardTitle className="text-lg font-display">Salary Impact by Skill</CardTitle>
@@ -303,7 +297,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Opportunity Board */}
           <Card className="panel-soft">
             <CardHeader className="pb-2">
               <CardTitle className="text-lg font-display flex items-center justify-between">
@@ -329,7 +322,6 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {/* Sidebar Controls */}
         <aside className="space-y-6 lg:sticky lg:top-24 self-start">
           <Card className="gradient-finance hover-glow text-primary-foreground border-border/50">
             <CardHeader className="pb-2">

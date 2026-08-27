@@ -7,14 +7,16 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProfileProvider } from "@/contexts/ProfileContext";
 import AppLayout from "@/components/AppLayout";
 
-const Index = lazy(() => import("./pages/Index"));
-const Auth = lazy(() => import("./pages/Auth"));
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-const Skills = lazy(() => import("./pages/Skills"));
-const Career = lazy(() => import("./pages/Career"));
-const Finance = lazy(() => import("./pages/Finance"));
-const Planner = lazy(() => import("./pages/Planner"));
-const NotFound = lazy(() => import("./pages/NotFound"));
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+
+const Index = lazy(() => import("./views/Index"));
+const Auth = lazy(() => import("./views/Auth"));
+const Dashboard = lazy(() => import("./views/Dashboard"));
+const Skills = lazy(() => import("./views/Skills"));
+const Career = lazy(() => import("./views/Career"));
+const Finance = lazy(() => import("./views/Finance"));
+const Planner = lazy(() => import("./views/Planner"));
+const NotFound = lazy(() => import("./views/NotFound"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,7 +46,8 @@ const App = () => (
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AuthProvider>
           <ProfileProvider>
-            <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading...</div>}>
+            <ErrorBoundary>
+              <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading...</div>}>
               <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/auth" element={<Auth />} />
@@ -66,6 +69,7 @@ const App = () => (
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
+          </ErrorBoundary>
           </ProfileProvider>
         </AuthProvider>
       </BrowserRouter>

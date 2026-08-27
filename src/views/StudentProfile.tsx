@@ -5,12 +5,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { User, ShieldCheck, Sparkles, FileText, Trophy, Award, CheckCircle2, Settings, Mail, Lock } from 'lucide-react';
+import { User, Sparkles, FileText, Trophy, Award, Settings, Mail } from 'lucide-react';
 import { RICH_CAREERS } from '@/data/careerDetails';
 import { SkillHeatmap } from '@/components/SkillHeatmap';
 import { JobReadinessScoreCard } from '@/components/JobReadinessScore';
@@ -20,7 +19,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
 export default function StudentProfile() {
-  const { profile, setTargetCareer, verifySkill, removeSkill } = useStudentProfile();
+  const { profile, setTargetCareer, verifySkill } = useStudentProfile();
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -57,13 +56,6 @@ export default function StudentProfile() {
 
   const handleValidateSkill = (skillName: string) => {
     setValidatingSkillName(skillName);
-  };
-
-  const confirmValidation = () => {
-    if (!validatingSkillName) return;
-    verifySkill(validatingSkillName);
-    toast.success(`Skill "${validatingSkillName}" verified! Status upgraded to VERIFIED.`);
-    setValidatingSkillName(null);
   };
 
   const handleSaveProfileSettings = async () => {
@@ -240,7 +232,6 @@ export default function StudentProfile() {
         onOpenChange={() => setValidatingSkillName(null)}
       />
 
-      {/* Settings Dialog */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DialogContent className="sm:max-w-md panel-soft p-0 overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[80vh]">
           <DialogHeader className="p-6 pb-4 border-b border-border/60 flex-none">

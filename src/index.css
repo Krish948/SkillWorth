@@ -93,6 +93,7 @@
 
   html {
     @apply scroll-smooth;
+    scrollbar-gutter: stable;
   }
 
   body,
@@ -113,20 +114,13 @@
     @apply font-display;
   }
 
-  /* Lock Toast & Popup containers against hover displacement and fluctuation loops */
+  /* Toast & Popup Container Enhancements */
   [data-sonner-toaster] {
     pointer-events: none;
   }
 
   [data-sonner-toast] {
-    pointer-events: auto !important;
-    transform: none !important;
-    transition: opacity 180ms ease !important;
-  }
-
-  [data-sonner-toast]:hover {
-    transform: none !important;
-    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22) !important;
+    pointer-events: auto;
   }
 }
 

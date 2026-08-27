@@ -45,19 +45,19 @@ vi.mock("@/components/ui/sonner", () => ({
   Toaster: () => null,
 }));
 
-vi.mock("@/pages/Index", () => ({ default: () => <div>Index Page</div> }));
-vi.mock("@/pages/Auth", () => ({ default: () => <div>Auth Page</div> }));
-vi.mock("@/pages/Dashboard", () => ({ default: () => <div>Dashboard Page</div> }));
-vi.mock("@/pages/Skills", () => ({ default: () => <div>Skills Page</div> }));
-vi.mock("@/pages/Career", () => ({ default: () => <div>Career Page</div> }));
-vi.mock("@/pages/CareerQuiz", () => ({ default: () => <div>Career Quiz Page</div> }));
-vi.mock("@/pages/ResumeAnalyzer", () => ({ default: () => <div>Resume Analyzer Page</div> }));
-vi.mock("@/pages/InterviewSimulator", () => ({ default: () => <div>Interview Simulator Page</div> }));
-vi.mock("@/pages/StudentProfile", () => ({ default: () => <div>Student Profile Page</div> }));
-vi.mock("@/pages/Finance", () => ({ default: () => <div>Finance Page</div> }));
-vi.mock("@/pages/Simulation", () => ({ default: () => <div>Simulation Page</div> }));
-vi.mock("@/pages/Planner", () => ({ default: () => <div>Planner Page</div> }));
-vi.mock("@/pages/NotFound", () => ({ default: () => <div>Not Found</div> }));
+vi.mock("@/views/Index", () => ({ default: () => <div>Index Page</div> }));
+vi.mock("@/views/Auth", () => ({ default: () => <div>Auth Page</div> }));
+vi.mock("@/views/Dashboard", () => ({ default: () => <div>Dashboard Page</div> }));
+vi.mock("@/views/Skills", () => ({ default: () => <div>Skills Page</div> }));
+vi.mock("@/views/Career", () => ({ default: () => <div>Career Page</div> }));
+vi.mock("@/views/CareerQuiz", () => ({ default: () => <div>Career Quiz Page</div> }));
+vi.mock("@/views/ResumeAnalyzerPage", () => ({ default: () => <div>Resume Analyzer Page</div> }));
+vi.mock("@/views/InterviewSimulator", () => ({ default: () => <div>Interview Simulator Page</div> }));
+vi.mock("@/views/StudentProfile", () => ({ default: () => <div>Student Profile Page</div> }));
+vi.mock("@/views/Finance", () => ({ default: () => <div>Finance Page</div> }));
+vi.mock("@/views/Simulation", () => ({ default: () => <div>Simulation Page</div> }));
+vi.mock("@/views/Planner", () => ({ default: () => <div>Planner Page</div> }));
+vi.mock("@/views/NotFound", () => ({ default: () => <div>Not Found</div> }));
 
 import App from "@/App";
 

@@ -11,8 +11,11 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
+    watch: {
+      ignored: (filePath: string) => filePath.includes("ResumeAnalyzer") || filePath.includes("src\\pages") || filePath.includes("src/pages"),
+    },
   },
-  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  plugins: [react()],
   build: {
     chunkSizeWarningLimit: 700,
     rollupOptions: {

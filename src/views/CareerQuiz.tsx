@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useStudentProfile } from '@/contexts/ProfileContext';
 import { evaluateCareerQuiz, QuizAnswer, CareerMatchResult } from '@/lib/quiz-engine';
+import { AiOrchestrator } from '@/services/ai/aiOrchestrator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -63,7 +64,7 @@ export default function CareerQuiz() {
     }
   };
 
-  const handleCalculate = () => {
+  const handleCalculate = async () => {
     const currentSkillNames = profile.skills.map(s => s.name);
     const answers: QuizAnswer = {
       interests: selectedInterests,
@@ -74,9 +75,15 @@ export default function CareerQuiz() {
     };
 
     const calculated = evaluateCareerQuiz(answers, currentSkillNames);
+    const topResult = calculated[0];
+    if (topResult) {
+      const aiNote = await AiOrchestrator.getCareerGuidance(topResult.role, selectedInterests, currentSkillNames);
+      if (aiNote) {
+        topResult.explanation = `${topResult.explanation} AI Coaching Note: ${aiNote}`;
+      }
+    }
     setResults(calculated);
 
-    const topResult = calculated[0];
     if (topResult) {
       saveQuizResult({
         completedAtIso: new Date().toISOString(),

@@ -1,5 +1,5 @@
-import { useMemo, useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAllSkills, useUserSkills, useAddUserSkill, useRemoveUserSkill } from '@/hooks/useUserSkills';
 import { useStudentProfile } from '@/contexts/ProfileContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,9 +12,10 @@ import { Plus, X, Sparkles, Flame, ShieldCheck, FileText, Compass, User, CheckCi
 import { toast } from 'sonner';
 import { StatePanel } from '@/components/ui/state-panel';
 import { SkillHeatmap } from '@/components/SkillHeatmap';
-import ResumeAnalyzer from '@/pages/ResumeAnalyzer';
-import CareerQuiz from '@/pages/CareerQuiz';
-import StudentProfile from '@/pages/StudentProfile';
+import ResumeAnalyzer from '@/views/ResumeAnalyzerPage';
+import CareerQuiz from '@/views/CareerQuiz';
+import StudentProfile from '@/views/StudentProfile';
+import { SkillVerificationModal } from '@/components/SkillVerificationModal';
 
 function getErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -76,13 +77,6 @@ export default function Skills() {
     removeSkill.mutate(id, { onSuccess: () => toast.success('Skill removed') });
   };
 
-  const confirmValidation = () => {
-    if (!validatingSkillName) return;
-    verifySkill(validatingSkillName);
-    toast.success(`Skill "${validatingSkillName}" verified! Status upgraded to VERIFIED.`);
-    setValidatingSkillName(null);
-  };
-
   const levelLabels = ['', 'Beginner', 'Intermediate', 'Advanced', 'Expert'];
   const categories = [...new Set(allSkills.map(s => s.category))];
 
@@ -114,7 +108,6 @@ export default function Skills() {
 
   return (
     <div className="space-y-6 animate-fade-in page-shell">
-      {/* Module Header */}
       <section className="page-hero">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -140,7 +133,6 @@ export default function Skills() {
         </div>
       </section>
 
-      {/* Sub-Navigation Tabs */}
       <Tabs value={activeTabParam} onValueChange={handleTabChange} className="space-y-6">
         <TabsList className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1 bg-muted/60 p-1.5 rounded-2xl h-auto">
           <TabsTrigger value="matrix" className="text-xs py-2 rounded-xl gap-1.5">
@@ -163,7 +155,6 @@ export default function Skills() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Tab 1: Skill Matrix */}
         <TabsContent value="matrix" className="space-y-6">
           <div className="grid gap-6 xl:grid-cols-[minmax(300px,390px)_minmax(0,1fr)]">
             <Card className="panel-soft xl:sticky xl:top-24 self-start">
@@ -250,7 +241,6 @@ export default function Skills() {
           </div>
         </TabsContent>
 
-        {/* Tab 2: 3-Way Heatmap */}
         <TabsContent value="heatmap">
           <SkillHeatmap
             skills={profile.skills}
@@ -259,7 +249,6 @@ export default function Skills() {
           />
         </TabsContent>
 
-        {/* Tab 3: Verification */}
         <TabsContent value="verification" className="space-y-6">
           <Card className="panel-soft">
             <CardHeader>
@@ -299,45 +288,24 @@ export default function Skills() {
           </Card>
         </TabsContent>
 
-        {/* Tab 4: Resume Analyzer */}
         <TabsContent value="resume">
           <ResumeAnalyzer />
         </TabsContent>
 
-        {/* Tab 5: Career DNA Quiz */}
         <TabsContent value="quiz">
           <CareerQuiz />
         </TabsContent>
 
-        {/* Tab 6: Full Profile */}
         <TabsContent value="profile">
           <StudentProfile />
         </TabsContent>
       </Tabs>
 
-      {validatingSkillName && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <Card className="max-w-md w-full panel-soft border-primary/50">
-            <CardHeader>
-              <CardTitle className="text-xl font-display flex items-center gap-2">
-                <ShieldCheck className="w-6 h-6 text-primary" /> Technical Skill Verification
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-xs">
-              <p className="text-muted-foreground">
-                Confirm validation assessment for <strong>{validatingSkillName}</strong>. Demonstrating core code proficiency upgrades this skill to <strong>VERIFIED</strong>.
-              </p>
-              <div className="rounded-xl bg-primary/10 p-3 text-primary">
-                <strong>Assessment Criterion:</strong> Code syntax review, core API understanding, and technical accuracy pass.
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={() => setValidatingSkillName(null)}>Cancel</Button>
-                <Button onClick={confirmValidation} className="hover-glow">Pass & Verify Skill ✓</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <SkillVerificationModal
+        skillName={validatingSkillName || ''}
+        open={Boolean(validatingSkillName)}
+        onOpenChange={() => setValidatingSkillName(null)}
+      />
     </div>
   );
 }

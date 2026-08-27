@@ -9,14 +9,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { MessageSquare, Sparkles, Send, CheckCircle2, RotateCcw, Trophy, ShieldAlert, Award, AlertCircle, HelpCircle, Check, X } from 'lucide-react';
+import { MessageSquare, Sparkles, Send, CheckCircle2, RotateCcw, Trophy, ShieldAlert, Award } from 'lucide-react';
 import { RICH_CAREERS } from '@/data/careerDetails';
 import { toast } from 'sonner';
 
 export default function InterviewSimulator() {
   const { profile, addInterviewSession } = useStudentProfile();
 
-  // Candidate Config State
   const [selectedRole, setSelectedRole] = useState(profile.targetCareer || 'Frontend Developer');
   const [selectedMode, setSelectedMode] = useState<InterviewConfig['interviewType']>('Technical');
   const [selectedExp, setSelectedExp] = useState<InterviewConfig['experienceLevel']>('Mid');
@@ -25,7 +24,6 @@ export default function InterviewSimulator() {
   const [jobDescriptionInput, setJobDescriptionInput] = useState('');
   const [specificTopicsInput, setSpecificTopicsInput] = useState('State Management, Virtual DOM, Async Code');
 
-  // Interview Execution State
   const [sessionActive, setSessionActive] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,7 +73,6 @@ export default function InterviewSimulator() {
       const question = currentQuestionText;
       const answer = userAnswerText.trim();
 
-      // 1. Evaluate single turn with AI engine
       const evaluation = await AiOrchestrator.evaluateInterviewTurn(currentConfig, turnIndex, question, answer);
 
       const updatedTurns = [...turns, { question, candidateAnswer: answer, evaluation }];
@@ -83,13 +80,11 @@ export default function InterviewSimulator() {
       setUserAnswerText('');
 
       if (updatedTurns.length >= 3) {
-        // End session & compile final report card
         const evaluatedList = updatedTurns.map(t => t.evaluation!).filter(Boolean);
         const report = AiOrchestrator.compileInterviewReport(currentConfig, evaluatedList);
         setFinalReport(report);
         setSessionActive(false);
 
-        // Add to profile & persist to database
         addInterviewSession({
           id: `int-${Date.now()}`,
           dateIso: new Date().toISOString(),
@@ -104,7 +99,6 @@ export default function InterviewSimulator() {
 
         toast.success(`Mock Interview Complete! Overall Readiness Score: ${report.overallScore}%.`);
       } else {
-        // 2. Generate next dynamic follow-up question
         const followUp = await AiOrchestrator.getInterviewFollowUp(selectedRole, selectedMode, question, answer);
         setCurrentQuestionText(followUp || `Can you elaborate on how you would measure performance metrics and handle edge cases for that implementation in ${selectedRole}?`);
       }

@@ -12,12 +12,10 @@ import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { StatePanel } from '@/components/ui/state-panel';
-import { formatINR, formatINRCompact } from '@/lib/currency';
+import { formatINRCompact } from '@/lib/currency';
 import { getStorageJson, getStorageItem, setStorageJson, setStorageItem } from '@/lib/local-storage';
 import { RICH_CAREERS } from '@/data/careerDetails';
 import {
-  buildActionNudges,
-  buildFinanceProjection,
   buildLearningPlan,
   buildMilestonesFromPlan,
   getRoleReadiness,
@@ -26,8 +24,8 @@ import {
   type MilestoneStatus,
 } from '@/lib/career-roadmap';
 import { buildAdaptiveLearningPlan } from '@/lib/adaptive-planner';
-import InterviewSimulator from '@/pages/InterviewSimulator';
-import { CalendarCheck2, Siren, Rocket, Clock3, Flag, Search, MessageSquare, Compass, CheckCircle2, ArrowRight } from 'lucide-react';
+import InterviewSimulator from '@/views/InterviewSimulator';
+import { CalendarCheck2, Rocket, Flag, Search, MessageSquare, Compass } from 'lucide-react';
 
 function storageKey(userId: string, suffix: string): string {
   return `skillworth:planner:${suffix}:${userId}`;
@@ -40,7 +38,7 @@ export default function Planner() {
   const activeTabParam = searchParams.get('tab') || 'roadmap';
 
   const { user } = useAuth();
-  const { profile, setTargetCareer } = useStudentProfile();
+  const { profile } = useStudentProfile();
   const { data: userSkills = [], isLoading: userSkillsLoading, error: userSkillsError } = useUserSkills();
   const { data: jobs = [], isLoading: jobsLoading, error: jobsError } = useJobs();
   const { data: finance, isLoading: financeLoading, error: financeError } = useFinance();
@@ -106,7 +104,6 @@ export default function Planner() {
     [finance, learningPlan, milestones, readiness, weeklyHours],
   );
 
-  const completedMilestones = milestones.filter(milestone => milestone.status === 'completed').length;
   const targetCareerDetail = RICH_CAREERS[profile.targetCareer || 'Frontend Developer'] || RICH_CAREERS['Frontend Developer'];
 
   const visibleLearningPlan = useMemo(
@@ -170,7 +167,6 @@ export default function Planner() {
 
   return (
     <div className="space-y-6 animate-fade-in page-shell">
-      {/* Module Header */}
       <section className="page-hero">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -198,7 +194,6 @@ export default function Planner() {
         </div>
       </section>
 
-      {/* Sub-Navigation Tabs */}
       <Tabs value={activeTabParam} onValueChange={handleTabChange} className="space-y-6">
         <TabsList className="grid grid-cols-1 sm:grid-cols-3 gap-1 bg-muted/60 p-1.5 rounded-2xl h-auto max-w-xl">
           <TabsTrigger value="roadmap" className="text-xs py-2 rounded-xl gap-1.5">
@@ -212,7 +207,6 @@ export default function Planner() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Tab 1: Dynamic Career Roadmap */}
         <TabsContent value="roadmap" className="space-y-6">
           <Card className="panel-soft">
             <CardHeader>
@@ -278,7 +272,6 @@ export default function Planner() {
           </Card>
         </TabsContent>
 
-        {/* Tab 2: Focus Stack & Weekly Kanban */}
         <TabsContent value="kanban" className="space-y-6">
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_360px]">
             <div className="space-y-6 min-w-0">
@@ -380,7 +373,6 @@ export default function Planner() {
           </div>
         </TabsContent>
 
-        {/* Tab 3: Interview Simulator */}
         <TabsContent value="interview">
           <InterviewSimulator />
         </TabsContent>

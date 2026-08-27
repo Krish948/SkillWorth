@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent } from '@/components/ui/card';
-import { ShieldCheck, CheckCircle2, XCircle, BookOpen, Award } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ShieldCheck, CheckCircle2, XCircle, BookOpen, Award, RotateCcw, AlertTriangle } from 'lucide-react';
 import { useStudentProfile } from '@/contexts/ProfileContext';
-import { getAiGeneratedOrBankedQuestions, evaluateSkillAssessment, AssessmentQuestion, VerificationResult } from '@/lib/verification-engine';
+import { SkillAssessmentService, QuizQuestion, QuizEvaluationResult } from '@/services/ai/skillAssessmentService';
 import { toast } from 'sonner';
 
 interface SkillVerificationModalProps {
@@ -15,36 +16,72 @@ interface SkillVerificationModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export const SkillVerificationModal: React.FC<SkillVerificationModalProps> = ({ skillName, open, onOpenChange }) => {
-  const { verifySkill } = useStudentProfile();
+const TOPIC_SUGGESTIONS: Record<string, string[]> = {
+  JavaScript: ['Asynchronous Programming', 'DOM Manipulation', 'Closure & Scope', 'ES6+ Features', 'Event Loop'],
+  Python: ['Data Structures', 'OOP & Classes', 'Generators & Decorators', 'Concurrency & GIL', 'File & Stream I/O'],
+  React: ['Hooks & Dependency Arrays', 'State Management', 'Virtual DOM & Reconciliation', 'Performance & Memoization'],
+  SQL: ['Joins & Null Handling', 'Aggregations & Grouping', 'Window Functions', 'Indexing & Performance'],
+  TypeScript: ['Generics & Interfaces', 'Type Narrowing', 'Utility Types', 'Strict Type Checking'],
+  Node: ['Event Loop & Streams', 'Async I/O', 'Express Routing', 'Authentication & JWT'],
+  Docker: ['Containerization', 'Dockerfile Directives', 'Multi-stage Builds', 'Docker Compose'],
+};
 
-  const [questions, setQuestions] = useState<AssessmentQuestion[]>([]);
+export const SkillVerificationModal: React.FC<SkillVerificationModalProps> = ({ skillName, open, onOpenChange }) => {
+  const { recordAssessmentAttempt } = useStudentProfile();
+
+  const [selectedTopic, setSelectedTopic] = useState('General Concepts');
+  const [selectedDifficulty, setSelectedDifficulty] = useState<'Beginner' | 'Intermediate' | 'Advanced' | 'Expert'>('Intermediate');
+  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
+  const [quizStarted, setQuizStarted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [userAnswers, setUserAnswers] = useState<{ question: AssessmentQuestion; selectedIndex: number }[]>([]);
+  const [userAnswers, setUserAnswers] = useState<{ question: QuizQuestion; selectedIndex: number }[]>([]);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [result, setResult] = useState<VerificationResult | null>(null);
+  const [result, setResult] = useState<QuizEvaluationResult | null>(null);
 
   useEffect(() => {
     if (!skillName || !open) return;
-    setLoadingQuestions(true);
+    const defaultTopic = TOPIC_SUGGESTIONS[skillName]?.[0] || 'Core Fundamentals';
+    setSelectedTopic(defaultTopic);
+    setSelectedDifficulty('Intermediate');
+    setQuizStarted(false);
+    setQuestions([]);
     setCurrentIndex(0);
     setUserAnswers([]);
     setSelectedOption(null);
     setShowExplanation(false);
     setResult(null);
-
-    getAiGeneratedOrBankedQuestions(skillName, 'Intermediate')
-      .then(fetched => setQuestions(fetched))
-      .finally(() => setLoadingQuestions(false));
   }, [skillName, open]);
 
   if (!skillName) return null;
 
+  const startQuiz = async () => {
+    setLoadingQuestions(true);
+    try {
+      const fetched = await SkillAssessmentService.generateQuizQuestions({
+        skillName,
+        topic: selectedTopic,
+        difficulty: selectedDifficulty,
+        count: 4,
+      });
+      setQuestions(fetched);
+      setQuizStarted(true);
+      setCurrentIndex(0);
+      setUserAnswers([]);
+      setSelectedOption(null);
+      setShowExplanation(false);
+      setResult(null);
+    } catch {
+      toast.error('Could not generate quiz questions. Please try again.');
+    } finally {
+      setLoadingQuestions(false);
+    }
+  };
+
   const currentQuestion = questions[currentIndex] || questions[0];
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (selectedOption === null || !currentQuestion) {
       toast.error('Please select an answer option.');
       return;
@@ -58,17 +95,35 @@ export const SkillVerificationModal: React.FC<SkillVerificationModalProps> = ({ 
     if (currentIndex + 1 < questions.length) {
       setCurrentIndex(currentIndex + 1);
     } else {
-      // Calculate final verification result
-      const finalEval = evaluateSkillAssessment(skillName, updated);
-      setResult(finalEval);
+      // Evaluate assessment against EXACT > 75% rule
+      const evalResult = SkillAssessmentService.evaluateAssessment(skillName, selectedTopic, selectedDifficulty, updated);
+      setResult(evalResult);
 
-      // Verify skill in ProfileContext state & database
-      verifySkill(skillName);
-      toast.success(`Technical Assessment Complete! Skill "${skillName}" verified as ${finalEval.verifiedLevel} (${finalEval.verificationScore}%).`);
+      // Record attempt and update skill status in context + DB
+      await recordAssessmentAttempt({
+        skillName,
+        topic: selectedTopic,
+        difficulty: selectedDifficulty,
+        questionsAttempted: evalResult.totalQuestions,
+        correctAnswers: evalResult.correctAnswers,
+        totalQuestions: evalResult.totalQuestions,
+        score: evalResult.score,
+        percentage: evalResult.percentage,
+        strongConcepts: evalResult.strongConcepts,
+        weakConcepts: evalResult.weakConcepts,
+        studyRecommendations: evalResult.recommendedTopics,
+      });
+
+      if (evalResult.verificationStatus === 'VERIFIED') {
+        toast.success(`Assessment Passed! ${skillName} verified at ${evalResult.verifiedLevel} level (${evalResult.percentage}% score >= 75%).`);
+      } else {
+        toast.error(`Assessment Score ${evalResult.percentage}% (< 75%). Skill "${skillName}" remains NOT VERIFIED. Reach 75% or higher to verify.`);
+      }
     }
   };
 
   const handleReset = () => {
+    setQuizStarted(false);
     setCurrentIndex(0);
     setUserAnswers([]);
     setSelectedOption(null);
@@ -81,6 +136,7 @@ export const SkillVerificationModal: React.FC<SkillVerificationModalProps> = ({ 
     onOpenChange(false);
   };
 
+  const availableTopics = TOPIC_SUGGESTIONS[skillName] || ['Core Fundamentals', 'Practical Execution', 'Architecture & Design', 'Debugging & Optimization'];
   const progressPercent = questions.length > 0 ? Math.round(((currentIndex + (result ? 1 : 0)) / questions.length) * 100) : 0;
 
   return (
@@ -88,29 +144,77 @@ export const SkillVerificationModal: React.FC<SkillVerificationModalProps> = ({ 
       <DialogContent className="sm:max-w-xl panel-soft max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center justify-between">
-            <Badge variant="secondary" className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em]">NVIDIA AI Assessment</Badge>
-            {result && <Badge variant="default" className="bg-emerald-600 font-bold">{result.verifiedLevel} Level</Badge>}
+            <Badge variant="secondary" className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em]">AI Technical Assessment</Badge>
+            {result && (
+              <Badge variant={result.verificationStatus === 'VERIFIED' ? 'default' : 'outline'} className={result.verificationStatus === 'VERIFIED' ? 'bg-emerald-600 font-bold' : 'border-amber-500 text-amber-500 font-bold'}>
+                {result.verificationStatus === 'VERIFIED' ? `VERIFIED (${result.percentage}%)` : `NOT VERIFIED (${result.percentage}%)`}
+              </Badge>
+            )}
           </div>
           <DialogTitle className="text-2xl font-display flex items-center gap-2 mt-2">
             <ShieldCheck className="w-6 h-6 text-emerald-500" /> Verify Skill: {skillName}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Adaptive NVIDIA AI technical assessment evaluating concepts, practical execution, and problem solving.
+            Score <strong>75% or higher</strong> (≥75%) in this technical assessment to upgrade your skill status to <strong>VERIFIED</strong>.
           </DialogDescription>
         </DialogHeader>
 
-        {loadingQuestions ? (
+        {!quizStarted && !result && (
+          <div className="space-y-5 pt-2 text-xs">
+            <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-2">
+              <p className="font-semibold text-primary text-sm">Skill Verification Criteria:</p>
+              <ul className="space-y-1 text-muted-foreground">
+                <li>• <strong>Score &gt; 75%</strong> (76%, 80%, 100%) $\rightarrow$ <span className="text-emerald-500 font-semibold">VERIFIED</span></li>
+                <li>• <strong>Score &le; 75%</strong> (75%, 74%, 50%) $\rightarrow$ <span className="text-amber-500 font-semibold">NOT VERIFIED</span></li>
+              </ul>
+            </div>
+
+            <div className="space-y-2">
+              <label className="font-semibold text-foreground">Select Assessment Topic</label>
+              <Select value={selectedTopic} onValueChange={setSelectedTopic}>
+                <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Choose topic" /></SelectTrigger>
+                <SelectContent>
+                  {availableTopics.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="font-semibold text-foreground">Select Difficulty Level</label>
+              <Select value={selectedDifficulty} onValueChange={(v: any) => setSelectedDifficulty(v)}>
+                <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Choose difficulty" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Beginner">Beginner</SelectItem>
+                  <SelectItem value="Intermediate">Intermediate</SelectItem>
+                  <SelectItem value="Advanced">Advanced</SelectItem>
+                  <SelectItem value="Expert">Expert</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={handleClose}>Cancel</Button>
+              <Button onClick={startQuiz} disabled={loadingQuestions} className="hover-glow">
+                {loadingQuestions ? 'Generating Quiz...' : 'Start Quiz Assessment →'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {loadingQuestions && (
           <div className="py-12 text-center text-xs text-muted-foreground">
             <ShieldCheck className="w-8 h-8 mx-auto text-primary animate-pulse mb-2" />
-            <p className="font-semibold text-foreground">Generating NVIDIA AI Assessment...</p>
-            <p className="mt-1">Building custom questions for {skillName}...</p>
+            <p className="font-semibold text-foreground">Generating AI Assessment...</p>
+            <p className="mt-1">Building custom {selectedDifficulty} questions for {skillName} ({selectedTopic})...</p>
           </div>
-        ) : !result && currentQuestion ? (
+        )}
+
+        {quizStarted && !result && currentQuestion && (
           <div className="space-y-6 pt-2 text-xs">
             <div className="space-y-2">
               <div className="flex justify-between text-muted-foreground font-semibold">
                 <span>Question {currentIndex + 1} of {questions.length}</span>
-                <span className="text-primary font-bold">Tier {currentQuestion.tier}: {currentQuestion.concept}</span>
+                <span className="text-primary font-bold">Topic: {currentQuestion.topic}</span>
               </div>
               <Progress value={progressPercent} className="h-2" />
             </div>
@@ -157,28 +261,41 @@ export const SkillVerificationModal: React.FC<SkillVerificationModalProps> = ({ 
               </Button>
             </div>
           </div>
-        ) : result ? (
+        )}
+
+        {result && (
           <div className="space-y-6 pt-2 text-xs">
-            <Card className="panel-soft border-emerald-500/40 bg-[linear-gradient(135deg,hsl(160,84%,39%/0.08),transparent)]">
+            <Card className={`panel-soft ${result.verificationStatus === 'VERIFIED' ? 'border-emerald-500/40 bg-[linear-gradient(135deg,hsl(160,84%,39%/0.08),transparent)]' : 'border-amber-500/40 bg-amber-500/5'}`}>
               <CardContent className="p-5 space-y-4 text-center">
-                <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-500 mx-auto flex items-center justify-center">
-                  <Award className="w-8 h-8" />
+                <div className={`w-14 h-14 rounded-2xl mx-auto flex items-center justify-center ${result.verificationStatus === 'VERIFIED' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-amber-500/20 text-amber-500'}`}>
+                  {result.verificationStatus === 'VERIFIED' ? <Award className="w-8 h-8" /> : <AlertTriangle className="w-8 h-8" />}
                 </div>
                 <div>
-                  <h3 className="text-2xl font-display font-bold text-foreground">{result.verifiedLevel} Verified!</h3>
-                  <p className="text-xs text-muted-foreground mt-1">Verification Score: <span className="font-bold text-emerald-500 text-sm">{result.verificationScore}%</span></p>
+                  <h3 className="text-2xl font-display font-bold text-foreground">
+                    {result.verificationStatus === 'VERIFIED' ? `${result.verifiedLevel} Verified!` : 'Assessment Not Verified'}
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Score: <span className={`font-bold text-sm ${result.verificationStatus === 'VERIFIED' ? 'text-emerald-500' : 'text-amber-500'}`}>{result.percentage}%</span>
+                    <span className="ml-2 text-[11px]">({result.correctAnswers}/{result.totalQuestions} Correct)</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {result.verificationStatus === 'VERIFIED'
+                      ? 'Congratulations! Score > 75% threshold achieved. Skill is now VERIFIED.'
+                      : 'Requirement: Score > 75% required for verification. 75% or lower does not verify.'}
+                  </p>
                 </div>
-                <Progress value={result.verificationScore} className="h-2" />
+                <Progress value={result.percentage} className="h-2" />
               </CardContent>
             </Card>
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="rounded-xl border border-border/60 bg-card p-4 space-y-2">
                 <p className="font-semibold text-emerald-500 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4" /> Demonstrated Strong Concepts
+                  <CheckCircle2 className="w-4 h-4" /> Strong Concepts
                 </p>
                 <ul className="space-y-1 text-muted-foreground">
                   {result.strongConcepts.map((sc, i) => <li key={i}>✓ {sc}</li>)}
+                  {result.strongConcepts.length === 0 && <li>None demonstrated.</li>}
                 </ul>
               </div>
 
@@ -194,17 +311,20 @@ export const SkillVerificationModal: React.FC<SkillVerificationModalProps> = ({ 
             </div>
 
             <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-2">
-              <p className="font-semibold text-foreground flex items-center gap-1.5"><BookOpen className="w-4 h-4 text-primary" /> Recommended Next Steps</p>
-              <ul className="space-y-1 text-muted-foreground">
-                {result.studyRecommendations.map((rec, i) => <li key={i}>• {rec}</li>)}
-              </ul>
+              <p className="font-semibold text-foreground flex items-center gap-1.5"><BookOpen className="w-4 h-4 text-primary" /> Next Recommended Step</p>
+              <p className="text-muted-foreground">{result.recommendedNextAssessment}</p>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-border/60">
+            <div className="flex justify-between gap-2 pt-2 border-t border-border/60">
+              {result.verificationStatus !== 'VERIFIED' ? (
+                <Button onClick={startQuiz} variant="outline" className="gap-2">
+                  <RotateCcw className="w-4 h-4" /> Re-attempt Assessment
+                </Button>
+              ) : <div />}
               <Button onClick={handleClose} className="hover-glow">Close & View Profile ✓</Button>
             </div>
           </div>
-        ) : null}
+        )}
       </DialogContent>
     </Dialog>
   );
